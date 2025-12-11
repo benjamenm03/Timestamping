@@ -20,6 +20,9 @@ START_OFFSET_S = 930.0                 # <-- start the animation 5 minutes (300 
 YAW_IS_HEADING_CW_FROM_NORTH = True
 # Drone drawing size (arm half-length in meters)
 DRONE_SIZE_M = 30
+AUTO_SCALE_DRONE = True             # scale drone arms to flight volume
+DRONE_SIZE_SCALE = 0.05             # fraction of max span when auto-scaling
+DRONE_SIZE_MIN = 1.0                # meters
 # ------------------------------------------------------------------- #
 
 def _find_name(cols, candidates):
@@ -221,9 +224,6 @@ def animate_flight(csv_path=INPUT_CSV, fps=FPS, save_mp4=SAVE_MP4, mp4_name=MP4_
     for k in arr.keys():
         arr[k] = arr[k][i0:]
 
-    # Geometry
-    arms, upvec = make_drone_geometry(DRONE_SIZE_M)
-
     # Limits tightly hugging the flight path
     def _lims(data):
         dmin = float(np.min(data))
@@ -238,6 +238,17 @@ def animate_flight(csv_path=INPUT_CSV, fps=FPS, save_mp4=SAVE_MP4, mp4_name=MP4_
     xmin, xmax = _lims(arr["e"])
     ymin, ymax = _lims(arr["n"])
     zmin, zmax = _lims(arr["u"])
+
+    span_e = xmax - xmin
+    span_n = ymax - ymin
+    span_u = zmax - zmin
+    max_span = max(span_e, span_n, span_u)
+    drone_size = DRONE_SIZE_M
+    if AUTO_SCALE_DRONE and np.isfinite(max_span) and max_span > 0:
+        drone_size = max(DRONE_SIZE_MIN, max_span * DRONE_SIZE_SCALE)
+
+    # Geometry
+    arms, upvec = make_drone_geometry(drone_size)
 
     # Figure
     plt.rcParams["toolbar"] = "toolmanager"
