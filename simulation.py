@@ -9,6 +9,11 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from pathlib import Path
 
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    tqdm = None
+
 # -------------------------- configuration -------------------------- #
 INPUT_CSV = "2025-12-09_17-30-39_FLY075_gnss_att.csv"  # produced by gnss_attitude_subset.py
 FPS = 20                               # playback fps
@@ -96,7 +101,8 @@ def load_flight(csv_path):
     lon = _series_as_float(df, lon_col)
     alt_abs = _series_as_float(df, alt_abs_col)
     rel_h = _series_as_float(df, rel_h_col)
-    alt = np.where(np.isfinite(alt_abs), alt_abs, rel_h)
+    alt_msl = np.where(np.isfinite(alt_abs), alt_abs, rel_h)
+    alt_agl = np.where(np.isfinite(rel_h), rel_h, alt_msl)
 
     # Attitude (degrees); default to zeros if missing (mag subset)
     roll  = _series_as_float(df, roll_col)
@@ -110,13 +116,14 @@ def load_flight(csv_path):
         yaw = np.zeros(len(df), dtype=float)
 
     m = np.isfinite(time_s) & np.isfinite(lat) & np.isfinite(lon)
-    alt = np.where(np.isfinite(alt), alt, 0.0)
+    alt_agl = np.where(np.isfinite(alt_agl), alt_agl, 0.0)
+    alt_msl = np.where(np.isfinite(alt_msl), alt_msl, 0.0)
 
-    filtered = [arr[m] for arr in (time_s, lat, lon, alt, roll, pitch, yaw)]
-    time_s, lat, lon, alt, roll, pitch, yaw = filtered
+    filtered = [arr[m] for arr in (time_s, lat, lon, alt_agl, alt_msl, roll, pitch, yaw)]
+    time_s, lat, lon, alt_agl, alt_msl, roll, pitch, yaw = filtered
     if time_s.size < 2:
         raise ValueError("Not enough valid rows with time + lat/lon to animate.")
-    return time_s, lat, lon, alt, roll, pitch, yaw
+    return time_s, lat, lon, alt_agl, alt_msl, roll, pitch, yaw
 
 # ---- WGS84 conversions (geodetic -> ECEF -> ENU) ---- #
 def geodetic_to_ecef(lat_deg, lon_deg, h_m):
@@ -192,6 +199,46 @@ def resample_uniform(time_s, arrays_dict, fps=20):
             out[k] = np.interp(t_uni, time_s, arr)
     return t_uni, out
 
+def plot_overview(time_s, data):
+    if time_s.size == 0:
+        return None
+    t_rel = time_s - time_s[0]
+    fig, axes = plt.subplots(3, 1, figsize=(9, 10), sharex=False)
+    fig.suptitle("Flight Overview")
+
+    alt_msl = data.get("alt_msl")
+    if alt_msl is not None and alt_msl.size == time_s.size:
+        axes[0].plot(t_rel, alt_msl, color="tab:blue")
+    axes[0].set_ylabel("Altitude MSL (m)")
+    axes[0].set_xlabel("Time (s)")
+    axes[0].grid(True, alpha=0.3)
+
+    yaw = data.get("yaw")
+    if yaw is not None and yaw.size == time_s.size:
+        axes[1].plot(t_rel, yaw, color="tab:orange")
+    axes[1].set_ylabel("Yaw (deg)")
+    axes[1].set_xlabel("Time (s)")
+    axes[1].grid(True, alpha=0.3)
+
+    lat = data.get("lat")
+    lon = data.get("lon")
+    if lat is not None and lon is not None and lat.size == lon.size == time_s.size:
+        mask = np.isfinite(lat) & np.isfinite(lon)
+        if np.any(mask):
+            lon_f = lon[mask]
+            lat_f = lat[mask]
+            axes[2].plot(lon_f, lat_f, color="tab:green")
+            axes[2].plot(lon_f[0], lat_f[0], marker="o", color="black", label="Start")
+            axes[2].plot(lon_f[-1], lat_f[-1], marker="x", color="red", label="End")
+            axes[2].legend(loc="best")
+    axes[2].set_xlabel("Longitude")
+    axes[2].set_ylabel("Latitude")
+    axes[2].set_aspect("equal", "box")
+    axes[2].grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    return fig
+
 # ---- drone geometry ---- #
 def make_drone_geometry(size=0.4):
     L = size
@@ -208,21 +255,44 @@ def transform_segment(seg_body, R, pos):
 # ---- animation ---- #
 def animate_flight(csv_path=INPUT_CSV, fps=FPS, save_mp4=SAVE_MP4, mp4_name=MP4_NAME, start_offset_s=START_OFFSET_S):
     # Load & prepare data
-    t, lat, lon, alt, roll, pitch, yaw = load_flight(csv_path)
-    e, n, u, origin = geodetic_to_enu(lat, lon, alt)
-    arrays = {"e": e, "n": n, "u": u, "roll": roll, "pitch": pitch, "yaw": yaw}
-    t_uni, arr = resample_uniform(t, arrays, fps=fps)
+    t, lat, lon, alt_agl, alt_msl, roll, pitch, yaw = load_flight(csv_path)
+    e, n, u, origin = geodetic_to_enu(lat, lon, alt_msl)
+    arrays = {
+        "e": e,
+        "n": n,
+        "u": u,
+        "roll": roll,
+        "pitch": pitch,
+        "yaw": yaw,
+        "alt_agl": alt_agl,
+        "alt_msl": alt_msl,
+        "lat": lat,
+        "lon": lon,
+    }
+    t_uni_full, arr_full = resample_uniform(t, arrays, fps=fps)
 
     # ----- start-at-offset trimming -----
-    t_start = t_uni[0] + float(start_offset_s)
-    i0 = int(np.searchsorted(t_uni, t_start, side="left"))
-    if i0 >= len(t_uni) - 1:
+    t_start = t_uni_full[0] + float(start_offset_s)
+    i0 = int(np.searchsorted(t_uni_full, t_start, side="left"))
+    if i0 >= len(t_uni_full) - 1:
         print(f"[note] Flight shorter than start offset ({start_offset_s}s). Starting near the end.")
-        i0 = max(0, len(t_uni) - 2)
+        i0 = max(0, len(t_uni_full) - 2)
     # slice
-    t_uni = t_uni[i0:]
-    for k in arr.keys():
-        arr[k] = arr[k][i0:]
+    t_uni = t_uni_full[i0:]
+    arr = {k: v[i0:] for k, v in arr_full.items()}
+
+    overview_fig = plot_overview(t_uni_full, arr_full)
+    if overview_fig is not None:
+        try:
+            overview_fig.canvas.manager.set_window_title("Flight Overview")
+        except Exception:
+            pass
+        overview_path = Path(csv_path).with_name(Path(csv_path).stem + "_overview.png")
+        try:
+            overview_fig.savefig(overview_path, dpi=150, bbox_inches="tight")
+            print(f"Saved overview plot to {overview_path}")
+        except Exception as exc:
+            print(f"Could not save overview PNG: {exc}")
 
     # Limits tightly hugging the flight path
     def _lims(data):

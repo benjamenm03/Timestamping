@@ -1,5 +1,6 @@
 # Ignore CSV data files generated or imported during processing
 *.csv
 
-# Animation outputs
+# Simulation outputs
 *.mp4
+*.png

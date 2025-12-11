@@ -53,7 +53,7 @@ All scripts take the DatCon-generated CSV path as a required argument and emit n
   ```bash
   python3 simulation.py 2025-12-09_17-30-39_FLY075_gnss_att.csv
   ```
-  If you omit the argument it uses the filename hard-coded near the top of the script. Add `--no-mp4` to skip exporting a movie or `--offset <seconds>` to change the start point. Using the `_with_unix` or `_gnss_mag` files also works, but they may lack clean attitude columns so the drone will level out automatically.
+  If you omit the argument it uses the filename hard-coded near the top of the script. Add `--no-mp4` to skip exporting a movie or `--offset <seconds>` to change the start point. Using the `_with_unix` or `_gnss_mag` files also works, but they may lack clean attitude columns so the drone will level out automatically. Each run also saves a `<flight>_overview.png` containing three subplots: altitude MSL vs time, yaw vs time, and the lat/lon ground track.
 
 ## Typical macOS workflow
 
