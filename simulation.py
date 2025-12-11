@@ -224,11 +224,20 @@ def animate_flight(csv_path=INPUT_CSV, fps=FPS, save_mp4=SAVE_MP4, mp4_name=MP4_
     # Geometry
     arms, upvec = make_drone_geometry(DRONE_SIZE_M)
 
-    # Limits based on sliced data
-    margin = 2.0 * DRONE_SIZE_M
-    xmin, xmax = np.min(arr["e"])-margin, np.max(arr["e"])+margin
-    ymin, ymax = np.min(arr["n"])-margin, np.max(arr["n"])+margin
-    zmin, zmax = np.min(arr["u"])-margin, np.max(arr["u"])+margin
+    # Limits tightly hugging the flight path
+    def _lims(data):
+        dmin = float(np.min(data))
+        dmax = float(np.max(data))
+        if not np.isfinite(dmin) or not np.isfinite(dmax):
+            dmin, dmax = -DRONE_SIZE_M, DRONE_SIZE_M
+        if np.isclose(dmin, dmax):
+            dmin -= DRONE_SIZE_M
+            dmax += DRONE_SIZE_M
+        return dmin, dmax
+
+    xmin, xmax = _lims(arr["e"])
+    ymin, ymax = _lims(arr["n"])
+    zmin, zmax = _lims(arr["u"])
 
     # Figure
     plt.rcParams["toolbar"] = "toolmanager"
