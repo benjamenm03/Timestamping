@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -22,8 +23,12 @@ def _find_name(cols, candidates):
     return None
 
 def main():
-    infile  = "datdefined.csv"
-    outfile = _append_suffix(infile, "_with_unix")  # datdefined_with_unix.csv
+    parser = argparse.ArgumentParser(description="Add Unix and fractional seconds derived from GNSS date/time columns.")
+    parser.add_argument("input_csv", help="CSV exported from DatCon (e.g., 2025-12-09_17-30-39_FLY075.csv)")
+    args = parser.parse_args()
+
+    infile = args.input_csv
+    outfile = _append_suffix(infile, "_with_unix")
 
     # Read as strings to preserve untouched columns
     df = pd.read_csv(infile, dtype=str, keep_default_na=False)

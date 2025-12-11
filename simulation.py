@@ -9,7 +9,7 @@ from matplotlib.animation import FuncAnimation
 from pathlib import Path
 
 # -------------------------- configuration -------------------------- #
-INPUT_CSV = "datdefined_gnss_att.csv"  # produced by make_unix_from_gnss_att.py
+INPUT_CSV = "2025-12-09_17-30-39_FLY075_gnss_att.csv"  # produced by gnss_attitude_subset.py
 FPS = 20                               # playback fps
 SAVE_MP4 = True                       # set True to save an MP4 next to the CSV
 MP4_NAME = None                        # None => derive from INPUT_CSV with _anim.mp4

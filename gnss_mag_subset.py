@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -41,8 +42,12 @@ def _find_first_containing(cols, token_lists):
 
 # ---------- main ----------
 def main():
-    infile  = "datdefined.csv"
-    outfile = _append_suffix(infile, "_gnss_mag")  # datdefined_gnss_mag.csv
+    parser = argparse.ArgumentParser(description="Build a magnetometer subset CSV with GNSS-derived Unix timestamps.")
+    parser.add_argument("input_csv", help="CSV exported from DatCon (e.g., 2025-12-09_17-30-39_FLY075.csv)")
+    args = parser.parse_args()
+
+    infile = args.input_csv
+    outfile = _append_suffix(infile, "_gnss_mag")
 
     # Read as strings to preserve untouched formatting
     df = pd.read_csv(infile, dtype=str, keep_default_na=False)

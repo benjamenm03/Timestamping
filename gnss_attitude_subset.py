@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -47,14 +48,18 @@ def _find_angle_col(cols, primary_lists, avoid_tokens=("rate","gyro")):
 
 # ---------- main ----------
 def main():
+    parser = argparse.ArgumentParser(description="Build an attitude subset CSV with GNSS-derived Unix timestamps.")
+    parser.add_argument("input_csv", help="CSV exported from DatCon (e.g., 2025-12-09_17-30-39_FLY075.csv)")
+    args = parser.parse_args()
+
     """
-    Outputs datdefined_gnss_att.csv with:
+    Outputs <input>_gnss_att.csv with:
       tick, unix, fractional_seconds, gps_date, gps_time, gps_num_sats,
       latitude, longitude, altitude, relative_height, roll, pitch, yaw.
     NOTE: roll/pitch/yaw are **degrees** (DJI/DatCon IMU attitude fields are in deg).
     """
-    infile  = "datdefined.csv"
-    outfile = _append_suffix(infile, "_gnss_att")  # datdefined_gnss_att.csv
+    infile = args.input_csv
+    outfile = _append_suffix(infile, "_gnss_att")
 
     # Read as strings to preserve untouched formatting
     df = pd.read_csv(infile, dtype=str, keep_default_na=False)
