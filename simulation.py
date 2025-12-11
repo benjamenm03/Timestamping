@@ -2,6 +2,7 @@
 # Visualize a flight as a 3D animation (position + attitude).
 # Requires: pandas, numpy, matplotlib (with ffmpeg installed only if SAVE_MP4=True)
 
+import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,33 +22,95 @@ YAW_IS_HEADING_CW_FROM_NORTH = True
 DRONE_SIZE_M = 30
 # ------------------------------------------------------------------- #
 
-def _to_float(series):
-    return pd.to_numeric(series, errors="coerce").to_numpy()
+def _find_name(cols, candidates):
+    for cand in candidates:
+        for c in cols:
+            if c.lower() == cand.lower():
+                return c
+    low = [c.lower() for c in cols]
+    for cand in candidates:
+        toks = [t for t in cand.lower().split(":") if t]
+        for i, name in enumerate(low):
+            if all(tok in name for tok in toks):
+                return cols[i]
+    return None
+
+def _find_first_containing(cols, token_lists):
+    low = [c.lower() for c in cols]
+    for tokens in token_lists:
+        for i, name in enumerate(low):
+            if all(tok in name for tok in tokens):
+                return cols[i]
+    return None
+
+def _find_angle_col(cols, primary_lists, avoid_tokens=("rate","gyro")):
+    low = [c.lower() for c in cols]
+    for tokens in primary_lists:
+        for i, name in enumerate(low):
+            if all(tok in name for tok in tokens) and not any(bad in name for bad in avoid_tokens):
+                return cols[i]
+    return None
+
+def _series_as_float(df, col):
+    if not col:
+        return np.full(len(df), np.nan, dtype=float)
+    return pd.to_numeric(df[col], errors="coerce").to_numpy()
 
 def load_flight(csv_path):
     df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    cols = list(df.columns)
+
+    unix_col = _find_name(cols, ["unix"])
+    frac_col = _find_name(cols, ["fractional_seconds"])
+    if not unix_col or not frac_col:
+        raise ValueError("Input must contain 'unix' and 'fractional_seconds' columns. Run one of the GNSS scripts first.")
+
+    lat_col = _find_first_containing(cols, [["latitude"], ["gps","latitude"], ["lat"]])
+    lon_col = _find_first_containing(cols, [["longitude"], ["gps","longitude"], ["lon"]])
+    alt_abs_col = (
+        _find_name(cols, ["altitude"]) or
+        _find_first_containing(cols, [["gps","alt"]]) or
+        _find_first_containing(cols, [["height"]])
+    )
+    rel_h_col = (
+        _find_first_containing(cols, [["relative","height"]]) or
+        _find_first_containing(cols, [["relativeheight"]]) or
+        _find_first_containing(cols, [["height","takeoff"]]) or
+        _find_first_containing(cols, [["height","home"]])
+    )
+
+    roll_col  = _find_angle_col(cols, [["roll"], ["atti","roll"], ["imu","atti","roll"]])
+    pitch_col = _find_angle_col(cols, [["pitch"], ["atti","pitch"], ["imu","atti","pitch"]])
+    yaw_col   = _find_angle_col(cols, [["yaw"], ["atti","yaw"], ["imu","atti","yaw"]])
 
     # Time
-    t_unix  = _to_float(df.get("unix", pd.Series([])))
-    t_frac  = _to_float(df.get("fractional_seconds", pd.Series([])))
-    time_s  = t_unix + np.nan_to_num(t_frac, nan=0.0)
+    t_unix = _series_as_float(df, unix_col)
+    t_frac = _series_as_float(df, frac_col)
+    time_s = t_unix + np.nan_to_num(t_frac, nan=0.0)
 
     # Position
-    lat = _to_float(df.get("latitude", pd.Series([])))
-    lon = _to_float(df.get("longitude", pd.Series([])))
-    alt_abs = _to_float(df.get("altitude", pd.Series([])))
-    rel_h   = _to_float(df.get("relative_height", pd.Series([])))
-    alt = rel_h.copy() if np.all(~np.isfinite(alt_abs)) and np.any(np.isfinite(rel_h)) else alt_abs
+    lat = _series_as_float(df, lat_col)
+    lon = _series_as_float(df, lon_col)
+    alt_abs = _series_as_float(df, alt_abs_col)
+    rel_h = _series_as_float(df, rel_h_col)
+    alt = np.where(np.isfinite(alt_abs), alt_abs, rel_h)
 
-    # Attitude (degrees)
-    roll  = _to_float(df.get("roll", pd.Series([])))
-    pitch = _to_float(df.get("pitch", pd.Series([])))
-    yaw   = _to_float(df.get("yaw", pd.Series([])))
+    # Attitude (degrees); default to zeros if missing (mag subset)
+    roll  = _series_as_float(df, roll_col)
+    pitch = _series_as_float(df, pitch_col)
+    yaw   = _series_as_float(df, yaw_col)
+    if not np.any(np.isfinite(roll)):
+        roll = np.zeros(len(df), dtype=float)
+    if not np.any(np.isfinite(pitch)):
+        pitch = np.zeros(len(df), dtype=float)
+    if not np.any(np.isfinite(yaw)):
+        yaw = np.zeros(len(df), dtype=float)
 
     m = np.isfinite(time_s) & np.isfinite(lat) & np.isfinite(lon)
     alt = np.where(np.isfinite(alt), alt, 0.0)
 
-    time_s, lat, lon, alt, roll, pitch, yaw = [arr[m] for arr in (time_s, lat, lon, alt, roll, pitch, yaw)]
+    filtered = [arr[m] for arr in (time_s, lat, lon, alt, roll, pitch, yaw)]
+    time_s, lat, lon, alt, roll, pitch, yaw = filtered
     if time_s.size < 2:
         raise ValueError("Not enough valid rows with time + lat/lon to animate.")
     return time_s, lat, lon, alt, roll, pitch, yaw
@@ -217,5 +280,23 @@ def animate_flight(csv_path=INPUT_CSV, fps=FPS, save_mp4=SAVE_MP4, mp4_name=MP4_
     else:
         plt.show()
 
+def main():
+    parser = argparse.ArgumentParser(description="Animate a GNSS-derived flight CSV (from add_unix/gnss_* scripts).")
+    parser.add_argument("input_csv", nargs="?", default=INPUT_CSV,
+                        help="CSV file (default: %(default)s)")
+    parser.add_argument("--fps", type=float, default=FPS, help="Playback frames per second.")
+    parser.add_argument("--offset", type=float, default=START_OFFSET_S, help="Start offset into the flight (seconds).")
+    parser.add_argument("--no-mp4", action="store_true", help="Disable MP4 export even if enabled in config.")
+    parser.add_argument("--mp4-name", type=str, default=None, help="Override MP4 output path/name.")
+    args = parser.parse_args()
+
+    animate_flight(
+        csv_path=args.input_csv,
+        fps=args.fps,
+        save_mp4=False if args.no_mp4 else SAVE_MP4,
+        mp4_name=args.mp4_name or MP4_NAME,
+        start_offset_s=args.offset,
+    )
+
 if __name__ == "__main__":
-    animate_flight()
+    main()
