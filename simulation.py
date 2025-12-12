@@ -95,6 +95,9 @@ def load_flight(csv_path):
     t_unix = _series_as_float(df, unix_col)
     t_frac = _series_as_float(df, frac_col)
     time_s = t_unix + np.nan_to_num(t_frac, nan=0.0)
+    # Drop obvious sentinel/uninitialized epochs (e.g., -9223372037) so resampling
+    # doesn't try to span decades/minutes and explode memory.
+    time_s = np.where(time_s > 0.0, time_s, np.nan)
 
     # Position
     lat = _series_as_float(df, lat_col)
