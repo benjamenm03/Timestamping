@@ -202,12 +202,19 @@ def resample_uniform(time_s, arrays_dict, fps=20):
             out[k] = np.interp(t_uni, time_s, arr)
     return t_uni, out
 
-def plot_overview(time_s, data):
+def plot_overview(time_s, data, start_unix=None):
     if time_s.size == 0:
         return None
+    if start_unix is None or not np.isfinite(start_unix):
+        start_unix = float(time_s[0])
     t_rel = time_s - time_s[0]
     fig, axes = plt.subplots(3, 1, figsize=(9, 10), sharex=False)
-    fig.suptitle("Flight Overview")
+    title = "Flight Overview"
+    if np.isfinite(start_unix):
+        start_dt = pd.to_datetime(start_unix, unit="s", utc=True)
+        start_str = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        title = f"Flight Overview – Start UTC {start_str} (seconds since this instant)"
+    fig.suptitle(title)
 
     alt_msl = data.get("alt_msl")
     if alt_msl is not None and alt_msl.size == time_s.size:
@@ -284,7 +291,8 @@ def animate_flight(csv_path=INPUT_CSV, fps=FPS, save_mp4=SAVE_MP4, mp4_name=MP4_
     t_uni = t_uni_full[i0:]
     arr = {k: v[i0:] for k, v in arr_full.items()}
 
-    overview_fig = plot_overview(t_uni_full, arr_full)
+    first_valid_unix = float(t[0]) if t.size else np.nan
+    overview_fig = plot_overview(t_uni_full, arr_full, start_unix=first_valid_unix)
     if overview_fig is not None:
         try:
             overview_fig.canvas.manager.set_window_title("Flight Overview")
