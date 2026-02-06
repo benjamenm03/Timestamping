@@ -6,7 +6,7 @@ This repository holds the CSV post-processing tools I use after converting DJI `
 2. Run the DatCon 4.3.0 executable (from the separate DatCon4.3.0 repo) to create a CSV export. The file name looks like `2025-12-09_17-30-39_FLY075.csv`. Launching DatCon from that repo: `java -jar DatCon.4.3.0.jar`.
 3. Drop that CSV into this repository and process it with the Python scripts described below.
 
-The scripts rely on Python 3 with `pandas` and `numpy` installed. On macOS you can set that up with:
+The scripts rely on Python 3 with `pandas`, `numpy`, and `matplotlib` installed. On macOS you can set that up with:
 
 ```bash
 python3 -m pip install --user pandas numpy matplotlib
@@ -33,7 +33,7 @@ All scripts take the DatCon-generated CSV path as a required argument and emit n
   Output: `2025-12-09_17-30-39_FLY075_with_unix.csv`
 
 ### `gnss_attitude_subset.py`
-- Purpose: Builds a tidy CSV containing GNSS time/position metadata plus roll, pitch, and yaw (degrees) for attitude analysis.
+- Purpose: Builds a tidy CSV containing GNSS time/position metadata plus roll, pitch, and yaw (degrees) for attitude analysis. It also carries forward RFI-related telemetry (GPS quality, jamming/spoof indicators, motor telemetry, and battery telemetry).
 - Run:
   ```bash
   python3 gnss_attitude_subset.py 2025-12-09_17-30-39_FLY075.csv
@@ -55,6 +55,22 @@ All scripts take the DatCon-generated CSV path as a required argument and emit n
   ```
   If you omit the argument it uses the filename hard-coded near the top of the script. Add `--no-mp4` to skip exporting a movie or `--offset <seconds>` to change the start point. Using the `_with_unix` or `_gnss_mag` files also works, but they may lack clean attitude columns so the drone will level out automatically. Each run also saves a `<flight>_overview.png` containing three subplots: altitude MSL vs time, yaw vs time, and the lat/lon ground track.
 
+### `overview_plot.py`
+- Purpose: Generate the same `<flight>_overview.png` without running the animation, plus an RFI-focused plot set and a motor-telemetry plot set.
+- Run:
+  ```bash
+  python3 overview_plot.py 2025-12-09_17-30-39_FLY075_gnss_att.csv
+  ```
+  Outputs:
+  - `<flight>_overview.png` (altitude MSL vs time, yaw vs time, lat/lon ground track)
+  - `<flight>_rfi_overview.png` (Satellites in View, GPS NoisePerMS, GPS AGC, Jamming Indicator with jamming-state bands, battery voltage and battery current)
+  - `<flight>_motor_overview.png` (motor current, motor PWM, motor speed)
+  Use `--output <path>` to override the overview PNG, `--rfi-output <path>` for the RFI plot, `--motor-output <path>` for the motor plot, `--fps` to change resampling, or `--show` to pop up the plot window.
+
+  Notes:
+  - Battery voltage and current are plotted in V and A (raw values are scaled by 1/1000 for plotting only; the CSV is untouched).
+  - For headless runs, you can do: `MPLBACKEND=Agg MPLCONFIGDIR=/tmp python3 overview_plot.py ...`
+
 ## Typical macOS workflow
 
 ```bash
@@ -62,6 +78,7 @@ cd /path/to/Timestamping
 python3 gnss_attitude_subset.py 2025-12-09_17-30-39_FLY075.csv
 python3 gnss_mag_subset.py 2025-12-09_17-30-39_FLY075.csv
 python3 add_unix_from_gnss.py 2025-12-09_17-30-39_FLY075.csv
+python3 overview_plot.py 2025-12-09_17-30-39_FLY075_gnss_att.csv
 ```
 
 Each command produces a new CSV with GNSS-aligned Unix timestamps that can be committed or analyzed as needed. Replace the sample file name with the actual DatCon export you copied from the DatCon 4.3.0 run.

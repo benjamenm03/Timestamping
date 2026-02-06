@@ -46,6 +46,9 @@ def _find_angle_col(cols, primary_lists, avoid_tokens=("rate","gyro")):
                 return cols[i]
     return None
 
+def _find_with_tokens(cols, tokens):
+    return _find_first_containing(cols, [tokens])
+
 # ---------- main ----------
 def main():
     parser = argparse.ArgumentParser(description="Build an attitude subset CSV with GNSS-derived Unix timestamps.")
@@ -162,6 +165,83 @@ def main():
         or _find_first_containing(cols, [["num","sat"]])
     )
 
+    # ---- 2b) RFI-RELEVANT STATUS/POWER SIGNALS ----
+    # Controller signal level
+    ctrl_sig_col = _find_name(cols, ["Controller:sig_level:D"]) or _find_first_containing(cols, [["controller","sig_level"]])
+
+    # GPS quality / DOP
+    gps_hdop_col = _find_name(cols, ["GPS:hDOP"]) or _find_first_containing(cols, [["gps","hdop"]])
+    gps_pdop_col = _find_name(cols, ["GPS:pDOP"]) or _find_first_containing(cols, [["gps","pdop"]])
+    gps_numgps_col = _find_name(cols, ["GPS:numGPS"]) or _find_first_containing(cols, [["gps","numgps"]])
+    gps_numglnas_col = _find_name(cols, ["GPS:numGLNAS"]) or _find_first_containing(cols, [["gps","numglnas"]])
+    gps_numsv_col = _find_name(cols, ["GPS:numSV"]) or _find_first_containing(cols, [["gps","numsv"]])
+
+    # GPS hardware status (noise/jamming/spoof)
+    gps_hw_noise_col = _find_name(cols, ["gps_hw_status:noiseperms:D"]) or _find_with_tokens(cols, ["gps_hw_status","noiseperms"])
+    gps_hw_agc_col = _find_name(cols, ["gps_hw_status:agccnt:D"]) or _find_with_tokens(cols, ["gps_hw_status","agccnt"])
+    gps_hw_jamind_col = _find_name(cols, ["gps_hw_status:jamind:D"]) or _find_with_tokens(cols, ["gps_hw_status","jamind"])
+    gps_hw_flag_col = _find_name(cols, ["gps_hw_status:flag:D"]) or _find_with_tokens(cols, ["gps_hw_status","flag"])
+    gps_hw_jamstate_col = _find_name(cols, ["gps_hw_status:jammingState:D"]) or _find_with_tokens(cols, ["gps_hw_status","jammingstate"])
+    gps_hw_spoof_col = _find_name(cols, ["gps_hw_status:spoofState:D"]) or _find_with_tokens(cols, ["gps_hw_status","spoofstate"])
+
+    # RTK (if present)
+    rtk_gpsstate_col = _find_name(cols, ["raw_rtk_data:GpsState:D"]) or _find_with_tokens(cols, ["raw_rtk_data","gpsstate"])
+    rtk_hdop_col = _find_name(cols, ["raw_rtk_data:hdop:D"]) or _find_with_tokens(cols, ["raw_rtk_data","hdop"])
+    rtk_posflg_cols = []
+    for i in range(6):
+        c = _find_name(cols, [f"raw_rtk_data:posFlg_{i}:D"]) or _find_with_tokens(cols, ["raw_rtk_data", f"posflg_{i}"])
+        rtk_posflg_cols.append(c)
+
+    # Motors / ESC / power
+    motor_speed_cols = {
+        "rfront": _find_name(cols, ["Motor:Speed:RFront[rpm]"]) or _find_with_tokens(cols, ["motor","speed","rfront"]),
+        "lfront": _find_name(cols, ["Motor:Speed:LFront[rpm]"]) or _find_with_tokens(cols, ["motor","speed","lfront"]),
+        "lback": _find_name(cols, ["Motor:Speed:LBack[rpm]"]) or _find_with_tokens(cols, ["motor","speed","lback"]),
+        "rback": _find_name(cols, ["Motor:Speed:RBack[rpm]"]) or _find_with_tokens(cols, ["motor","speed","rback"]),
+    }
+    motor_pwm_cols = {
+        "rfront": _find_name(cols, ["MotorCtrl:PWM:RFront[%]"]) or _find_with_tokens(cols, ["motorctrl","pwm","rfront"]),
+        "lfront": _find_name(cols, ["MotorCtrl:PWM:LFront[%]"]) or _find_with_tokens(cols, ["motorctrl","pwm","lfront"]),
+        "lback": _find_name(cols, ["MotorCtrl:PWM:LBack[%]"]) or _find_with_tokens(cols, ["motorctrl","pwm","lback"]),
+        "rback": _find_name(cols, ["MotorCtrl:PWM:RBack[%]"]) or _find_with_tokens(cols, ["motorctrl","pwm","rback"]),
+    }
+    motor_ppm_cols = {
+        "rfront": _find_name(cols, ["Motor:PPMrecv:RFront[%]"]) or _find_with_tokens(cols, ["motor","ppmrecv","rfront"]),
+        "lfront": _find_name(cols, ["Motor:PPMrecv:LFront[%]"]) or _find_with_tokens(cols, ["motor","ppmrecv","lfront"]),
+        "lback": _find_name(cols, ["Motor:PPMrecv:LBack[%]"]) or _find_with_tokens(cols, ["motor","ppmrecv","lback"]),
+        "rback": _find_name(cols, ["Motor:PPMrecv:RBack[%]"]) or _find_with_tokens(cols, ["motor","ppmrecv","rback"]),
+    }
+    motor_current_cols = {
+        "rfront": _find_name(cols, ["Motor:Current:RFront[Amperes]"]) or _find_with_tokens(cols, ["motor","current","rfront"]),
+        "lfront": _find_name(cols, ["Motor:Current:LFront[Amperes]"]) or _find_with_tokens(cols, ["motor","current","lfront"]),
+        "lback": _find_name(cols, ["Motor:Current:LBack[Amperes]"]) or _find_with_tokens(cols, ["motor","current","lback"]),
+        "rback": _find_name(cols, ["Motor:Current:RBack[Amperes]"]) or _find_with_tokens(cols, ["motor","current","rback"]),
+    }
+    motor_volts_cols = {
+        "rfront": _find_name(cols, ["Motor:Volts:RFront[volts]"]) or _find_with_tokens(cols, ["motor","volts","rfront"]),
+        "lfront": _find_name(cols, ["Motor:Volts:LFront[volts]"]) or _find_with_tokens(cols, ["motor","volts","lfront"]),
+        "lback": _find_name(cols, ["Motor:Volts:LBack[volts]"]) or _find_with_tokens(cols, ["motor","volts","lback"]),
+        "rback": _find_name(cols, ["Motor:Volts:RBack[volts]"]) or _find_with_tokens(cols, ["motor","volts","rback"]),
+    }
+    motor_vout_cols = {
+        "rfront": _find_name(cols, ["Motor:V_out:RFront[volts]"]) or _find_with_tokens(cols, ["motor","v_out","rfront"]),
+        "lfront": _find_name(cols, ["Motor:V_out:LFront[volts]"]) or _find_with_tokens(cols, ["motor","v_out","lfront"]),
+        "lback": _find_name(cols, ["Motor:V_out:LBack[volts]"]) or _find_with_tokens(cols, ["motor","v_out","lback"]),
+        "rback": _find_name(cols, ["Motor:V_out:RBack[volts]"]) or _find_with_tokens(cols, ["motor","v_out","rback"]),
+    }
+    motor_esct_cols = {
+        "rfront": _find_name(cols, ["Motor:EscTemp:RFront[degrees]"]) or _find_with_tokens(cols, ["motor","esctemp","rfront"]),
+        "lfront": _find_name(cols, ["Motor:EscTemp:LFront[degrees]"]) or _find_with_tokens(cols, ["motor","esctemp","lfront"]),
+        "lback": _find_name(cols, ["Motor:EscTemp:LBack[degrees]"]) or _find_with_tokens(cols, ["motor","esctemp","lback"]),
+        "rback": _find_name(cols, ["Motor:EscTemp:RBack[degrees]"]) or _find_with_tokens(cols, ["motor","esctemp","rback"]),
+    }
+
+    # Battery (for power/ripple context)
+    batt_voltage_col = _find_name(cols, ["battery_info:Voltage:D"]) or _find_with_tokens(cols, ["battery_info","voltage"])
+    batt_current_col = _find_name(cols, ["battery_info:Current:D"]) or _find_with_tokens(cols, ["battery_info","current"])
+    batt_pct_col = _find_name(cols, ["battery_info:CapPercentage:D"]) or _find_with_tokens(cols, ["battery_info","cappercentage"])
+    batt_temp_col = _find_name(cols, ["battery_info:BatTemperature:D"]) or _find_with_tokens(cols, ["battery_info","battemperature"])
+
     # ---- 3) BUILD OUTPUT (tick first, then the rest) ----
     N = len(df)
     def blank(): return pd.Series([""]*N)
@@ -181,6 +261,52 @@ def main():
     out_cols["pitch"] = df[pitch_col] if pitch_col else blank()
     out_cols["yaw"]   = df[yaw_col]   if yaw_col   else blank()
 
+    # Controller signal
+    out_cols["controller_signal_level"] = df[ctrl_sig_col] if ctrl_sig_col else blank()
+
+    # GPS quality
+    out_cols["gps_hdop"] = df[gps_hdop_col] if gps_hdop_col else blank()
+    out_cols["gps_pdop"] = df[gps_pdop_col] if gps_pdop_col else blank()
+    out_cols["gps_num_gps"] = df[gps_numgps_col] if gps_numgps_col else blank()
+    out_cols["gps_num_glnas"] = df[gps_numglnas_col] if gps_numglnas_col else blank()
+    out_cols["gps_num_sv"] = df[gps_numsv_col] if gps_numsv_col else blank()
+
+    # GPS HW status (jamming/spoof indicators)
+    out_cols["gps_hw_noiseperms"] = df[gps_hw_noise_col] if gps_hw_noise_col else blank()
+    out_cols["gps_hw_agccnt"] = df[gps_hw_agc_col] if gps_hw_agc_col else blank()
+    out_cols["gps_hw_jamind"] = df[gps_hw_jamind_col] if gps_hw_jamind_col else blank()
+    out_cols["gps_hw_flag"] = df[gps_hw_flag_col] if gps_hw_flag_col else blank()
+    out_cols["gps_hw_jamming_state"] = df[gps_hw_jamstate_col] if gps_hw_jamstate_col else blank()
+    out_cols["gps_hw_spoof_state"] = df[gps_hw_spoof_col] if gps_hw_spoof_col else blank()
+
+    # RTK status
+    out_cols["rtk_gps_state"] = df[rtk_gpsstate_col] if rtk_gpsstate_col else blank()
+    out_cols["rtk_hdop"] = df[rtk_hdop_col] if rtk_hdop_col else blank()
+    for i, c in enumerate(rtk_posflg_cols):
+        out_cols[f"rtk_posflg_{i}"] = df[c] if c else blank()
+
+    # Motor/ESC/power
+    for key, col in motor_speed_cols.items():
+        out_cols[f"motor_speed_{key}"] = df[col] if col else blank()
+    for key, col in motor_pwm_cols.items():
+        out_cols[f"motor_pwm_{key}"] = df[col] if col else blank()
+    for key, col in motor_ppm_cols.items():
+        out_cols[f"motor_ppm_{key}"] = df[col] if col else blank()
+    for key, col in motor_current_cols.items():
+        out_cols[f"motor_current_{key}"] = df[col] if col else blank()
+    for key, col in motor_volts_cols.items():
+        out_cols[f"motor_volts_{key}"] = df[col] if col else blank()
+    for key, col in motor_vout_cols.items():
+        out_cols[f"motor_vout_{key}"] = df[col] if col else blank()
+    for key, col in motor_esct_cols.items():
+        out_cols[f"motor_esctemp_{key}"] = df[col] if col else blank()
+
+    # Battery
+    out_cols["battery_voltage"] = df[batt_voltage_col] if batt_voltage_col else blank()
+    out_cols["battery_current"] = df[batt_current_col] if batt_current_col else blank()
+    out_cols["battery_percent"] = df[batt_pct_col] if batt_pct_col else blank()
+    out_cols["battery_temp"] = df[batt_temp_col] if batt_temp_col else blank()
+
     order = [
         "tick",
         "unix", "fractional_seconds",
@@ -188,6 +314,22 @@ def main():
         "latitude", "longitude",
         "altitude", "relative_height",
         "roll", "pitch", "yaw",
+        "controller_signal_level",
+        "gps_hdop", "gps_pdop",
+        "gps_num_gps", "gps_num_glnas", "gps_num_sv",
+        "gps_hw_noiseperms", "gps_hw_agccnt", "gps_hw_jamind",
+        "gps_hw_flag", "gps_hw_jamming_state", "gps_hw_spoof_state",
+        "rtk_gps_state", "rtk_hdop",
+        "rtk_posflg_0", "rtk_posflg_1", "rtk_posflg_2",
+        "rtk_posflg_3", "rtk_posflg_4", "rtk_posflg_5",
+        "motor_speed_rfront", "motor_speed_lfront", "motor_speed_lback", "motor_speed_rback",
+        "motor_pwm_rfront", "motor_pwm_lfront", "motor_pwm_lback", "motor_pwm_rback",
+        "motor_ppm_rfront", "motor_ppm_lfront", "motor_ppm_lback", "motor_ppm_rback",
+        "motor_current_rfront", "motor_current_lfront", "motor_current_lback", "motor_current_rback",
+        "motor_volts_rfront", "motor_volts_lfront", "motor_volts_lback", "motor_volts_rback",
+        "motor_vout_rfront", "motor_vout_lfront", "motor_vout_lback", "motor_vout_rback",
+        "motor_esctemp_rfront", "motor_esctemp_lfront", "motor_esctemp_lback", "motor_esctemp_rback",
+        "battery_voltage", "battery_current", "battery_percent", "battery_temp",
     ]
     out = pd.DataFrame({k: out_cols[k] for k in order})
 
