@@ -76,12 +76,10 @@ All scripts take the DatCon-generated CSV path as a required argument and emit n
 ```bash
 cd /path/to/Timestamping
 python3 gnss_attitude_subset.py 2025-12-09_17-30-39_FLY075.csv
-python3 gnss_mag_subset.py 2025-12-09_17-30-39_FLY075.csv
-python3 add_unix_from_gnss.py 2025-12-09_17-30-39_FLY075.csv
 python3 overview_plot.py 2025-12-09_17-30-39_FLY075_gnss_att.csv
 ```
 
-Each command produces a new CSV with GNSS-aligned Unix timestamps that can be committed or analyzed as needed. Replace the sample file name with the actual DatCon export you copied from the DatCon 4.3.0 run.
+This is the usual path for generating the overview plots: first create the attitude CSV from the DatCon export, then feed that CSV into `overview_plot.py`. Replace the sample file name with the actual DatCon export you copied from the DatCon 4.3.0 run.
 
 ## Running the simulation
 
